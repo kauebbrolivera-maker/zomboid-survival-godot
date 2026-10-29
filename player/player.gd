@@ -1,8 +1,10 @@
 class_name Player
 extends CharacterBody2D
-## Jogador: movimento em 8 direções (WASD/setas) com aceleração e atrito.
+## Jogador: movimento em 8 direções (WASD/setas) com aceleração e atrito,
+## e animações reais para as 8 direções (AnimatedSprite2D "Body").
 
 ## Nomes das 8 direções, na ordem dos ângulos (0° = direita, sentido horário na tela).
+## Precisam bater com os nomes das animações: idle_<dir> e walk_<dir>.
 const DIRECTION_NAMES: PackedStringArray = [
 	"right", "down_right", "down", "down_left", "left", "up_left", "up", "up_right",
 ]
@@ -14,19 +16,20 @@ const DIRECTION_NAMES: PackedStringArray = [
 ## Atrito (px/s²) ao soltar as teclas.
 @export var friction: float = 3200.0
 ## Se true, reduz pela metade o componente vertical depois de normalizar.
-## Como os tiles isométricos são 2:1 (64x32), andar "para cima" na tela cobre
+## Como os tiles isométricos são 2:1 (128x64), andar "para cima" na tela cobre
 ## o dobro de células que andar para o lado. Com o achatamento, a velocidade
 ## *na grade* fica igual em todas as direções e o movimento acompanha as ruas.
 @export var iso_vertical_squash: bool = true
 
-## Última direção (normalizada) em que o jogador andou. Útil para animações.
+## Última direção (normalizada) em que o jogador andou. Usada para o idle e o cone de visão.
 var last_direction: Vector2 = Vector2.DOWN
 
-@onready var sprite: Sprite2D = $Sprite2D
+@onready var body: AnimatedSprite2D = $Body
 
 
 func _ready() -> void:
 	add_to_group("player")   # permite que objetos do cenário encontrem o jogador
+	_update_facing(Vector2.ZERO)
 
 
 func _physics_process(delta: float) -> void:
@@ -46,12 +49,17 @@ func _physics_process(delta: float) -> void:
 	_update_facing(input_dir)
 
 
-# Espelha o sprite conforme o lado; parado, mantém o último lado.
+## Escolhe a animação pela direção:
+## andando -> "walk_<direção do input>"; parado -> "idle_<última direção>".
+## As direções da esquerda já vêm desenhadas na folha (sem flip_h).
 func _update_facing(input_dir: Vector2) -> void:
-	if input_dir.x < 0.0:
-		sprite.flip_h = true
-	elif input_dir.x > 0.0:
-		sprite.flip_h = false
+	var anim: StringName
+	if input_dir != Vector2.ZERO:
+		anim = StringName("walk_" + get_direction_name(input_dir))
+	else:
+		anim = StringName("idle_" + get_direction_name(last_direction))
+	if body.animation != anim or not body.is_playing():
+		body.play(anim)   # só troca quando muda, para não reiniciar o ciclo
 
 
 ## Nome da direção (8 direções) de `dir`, ex.: "up_left". Usa last_direction por padrão.
