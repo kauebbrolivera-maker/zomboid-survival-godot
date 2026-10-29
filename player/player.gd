@@ -1,35 +1,60 @@
 class_name Player
 extends CharacterBody2D
-## Jogador: movimento em 8 direções (WASD/setas) com aceleração e atrito,
-## e animações reais para as 8 direções (AnimatedSprite2D "Body").
+## Jogador: física 2D (move_and_slide) + modelo 3D pixelizado num SubViewport,
+## no estilo Project Zomboid. O corpo inteiro gira 360° suavemente no eixo Y.
+
+## MOVEMENT: olha para onde anda. MOUSE: olha para o cursor.
+enum AimMode { MOVEMENT, MOUSE }
 
 ## Nomes das 8 direções, na ordem dos ângulos (0° = direita, sentido horário na tela).
-## Precisam bater com os nomes das animações: idle_<dir> e walk_<dir>.
 const DIRECTION_NAMES: PackedStringArray = [
 	"right", "down_right", "down", "down_left", "left", "up_left", "up", "up_right",
 ]
 
+@export_group("Movimento")
 ## Velocidade máxima em pixels por segundo.
 @export var speed: float = 320.0
 ## Aceleração (px/s²) ao começar a andar.
 @export var acceleration: float = 2400.0
 ## Atrito (px/s²) ao soltar as teclas.
 @export var friction: float = 3200.0
-## Se true, reduz pela metade o componente vertical depois de normalizar.
-## Como os tiles isométricos são 2:1 (128x64), andar "para cima" na tela cobre
-## o dobro de células que andar para o lado. Com o achatamento, a velocidade
-## *na grade* fica igual em todas as direções e o movimento acompanha as ruas.
+## Se true, reduz pela metade o componente vertical (grade isométrica 2:1),
+## para a velocidade na grade ser igual em todas as direções.
 @export var iso_vertical_squash: bool = true
 
-## Última direção (normalizada) em que o jogador andou. Usada para o idle e o cone de visão.
+@export_group("Modelo 3D")
+## De onde vem a direção do olhar (corpo 3D e cone de visão).
+@export var aim_mode: AimMode = AimMode.MOVEMENT
+## Velocidade do giro do corpo (maior = mais rápido).
+@export var turn_speed: float = 12.0
+## Altura (unidades 3D) do balanço vertical ao andar.
+@export var bob_height: float = 0.05
+## Ângulo máximo (graus) do balanço das pernas/braços.
+@export var leg_swing_deg: float = 28.0
+## Passos por segundo na velocidade máxima.
+@export var step_rate: float = 2.2
+
+## Última direção de movimento, no espaço "desachatado" do input
+## (igual ao input_dir; x = direita na tela, y = baixo na tela).
 var last_direction: Vector2 = Vector2.DOWN
 
-@onready var body: AnimatedSprite2D = $Body
+var _walk_phase: float = 0.0
+var _ground_right: Vector3 = Vector3.RIGHT   # "direita da tela" no chão 3D
+var _ground_down: Vector3 = Vector3.BACK     # "baixo da tela" no chão 3D
+
+@onready var model: Node3D = $ModelView/SubViewport/World3D/Model
+@onready var camera_3d: Camera3D = $ModelView/SubViewport/World3D/Camera3D
+@onready var _leg_l: Node3D = $ModelView/SubViewport/World3D/Model/LegL
+@onready var _leg_r: Node3D = $ModelView/SubViewport/World3D/Model/LegR
+@onready var _arm_l: Node3D = $ModelView/SubViewport/World3D/Model/ArmL
+@onready var _arm_r: Node3D = $ModelView/SubViewport/World3D/Model/ArmR
+@onready var _base_model_y: float = model.position.y
 
 
 func _ready() -> void:
 	add_to_group("player")   # permite que objetos do cenário encontrem o jogador
-	_update_facing(Vector2.ZERO)
+	_compute_ground_axes()
+	model.rotation.y = _yaw_for(get_aim_direction())   # já começa virado
 
 
 func _physics_process(delta: float) -> void:
@@ -46,23 +71,66 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 
 	move_and_slide()
-	_update_facing(input_dir)
 
 
-## Escolhe a animação pela direção:
-## andando -> "walk_<direção do input>"; parado -> "idle_<última direção>".
-## As direções da esquerda já vêm desenhadas na folha (sem flip_h).
-func _update_facing(input_dir: Vector2) -> void:
-	var anim: StringName
-	if input_dir != Vector2.ZERO:
-		anim = StringName("walk_" + get_direction_name(input_dir))
-	else:
-		anim = StringName("idle_" + get_direction_name(last_direction))
-	if body.animation != anim or not body.is_playing():
-		body.play(anim)   # só troca quando muda, para não reiniciar o ciclo
+func _process(delta: float) -> void:
+	_update_facing(delta)
+	_update_walk_anim(delta)
+
+
+## Direção do olhar no espaço "desachatado" (mesmo espaço do input_dir).
+## Usada pelo modelo 3D e pelo vision.gd.
+func get_aim_direction() -> Vector2:
+	if aim_mode == AimMode.MOUSE:
+		var d: Vector2 = get_global_mouse_position() - global_position
+		d.y *= 2.0   # desfaz o achatamento 2:1 da tela
+		if d.length_squared() > 1.0:
+			return d.normalized()
+	return last_direction
 
 
 ## Nome da direção (8 direções) de `dir`, ex.: "up_left". Usa last_direction por padrão.
 func get_direction_name(dir: Vector2 = last_direction) -> String:
 	var index: int = wrapi(roundi(dir.angle() / (PI / 4.0)), 0, 8)
 	return DIRECTION_NAMES[index]
+
+
+## Converte uma direção da tela (desachatada) em yaw (rad) do modelo.
+## O "nariz" do modelo aponta para +Z local; rotation.y = yaw o leva a (sin yaw, 0, cos yaw).
+func _yaw_for(screen_dir: Vector2) -> float:
+	var g: Vector3 = _ground_right * screen_dir.x + _ground_down * screen_dir.y
+	return atan2(g.x, g.z)
+
+
+## Eixos da tela projetados no chão 3D, tirados da própria Camera3D
+## (assim continua certo se o yaw/inclinação da câmera mudar).
+func _compute_ground_axes() -> void:
+	var b: Basis = camera_3d.global_transform.basis
+	_ground_right = Vector3(b.x.x, 0.0, b.x.z).normalized()
+	# +Z da câmera aponta "para trás" dela = para baixo na tela, no chão.
+	_ground_down = Vector3(b.z.x, 0.0, b.z.z).normalized()
+
+
+## Gira o corpo inteiro suavemente (caminho mais curto, independente de FPS).
+func _update_facing(delta: float) -> void:
+	var dir: Vector2 = get_aim_direction()
+	if dir.length_squared() < 0.0001:
+		return
+	var t: float = 1.0 - exp(-turn_speed * delta)
+	model.rotation.y = lerp_angle(model.rotation.y, _yaw_for(dir), t)
+
+
+## Animação procedural simples: balanço vertical + pernas/braços em pêndulo.
+func _update_walk_anim(delta: float) -> void:
+	var amount: float = clampf(velocity.length() / speed, 0.0, 1.0)
+	if amount > 0.05:
+		_walk_phase = wrapf(_walk_phase + delta * step_rate * TAU * amount, 0.0, TAU)
+	else:
+		# parado: volta a fase para 0 devagar, sem tranco
+		_walk_phase = lerp_angle(_walk_phase, 0.0, 1.0 - exp(-10.0 * delta))
+	var swing: float = sin(_walk_phase) * deg_to_rad(leg_swing_deg) * amount
+	_leg_l.rotation.x = swing
+	_leg_r.rotation.x = -swing
+	_arm_l.rotation.x = -swing * 0.8
+	_arm_r.rotation.x = swing * 0.8
+	model.position.y = _base_model_y + absf(sin(_walk_phase)) * bob_height * amount
