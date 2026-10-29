@@ -4,6 +4,7 @@ Uso: python3 tools/gen_art.py   (determinístico: SEED fixo)
 Saídas: art/tiles.png, art/player.png, art/solar_panel.png, art/vision_cone.png,
         /workspace/art_preview.png
 """
+import sys
 import math, os, random
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -378,13 +379,16 @@ def main():
     prev.alpha_composite(tiles, (8, 8)); prev.alpha_composite(player, (8 + tiles.width + 16, 8))
     prev.alpha_composite(solar, (8 + tiles.width + 16 + player.width + 16, 8))
     prev.resize((prev.width * 2, prev.height * 2), Image.NEAREST).save("/workspace/art_preview.png")
-    sheet = gen_player_8dir(); sheet.save(os.path.join(ART, "player_8dir.png"))
-    write_sprite_frames(os.path.join(HERE, "..", "player", "player_frames.tres"))
-    # prévia 4x da folha 8 direções, com rótulos em fundo neutro
-    pv = Image.new("RGBA", (sheet.width + 8, sheet.height + 8), hx("5a5853"))
-    pv.alpha_composite(sheet, (4, 4))
-    pv.resize((pv.width * 4, pv.height * 4), Image.NEAREST).save("/workspace/player_8dir_preview.png")
-    print("ok:", tiles.size, player.size, solar.size, cone.size, sheet.size)
+    # O jogador agora é um modelo 3D (player.tscn/SubViewport). A folha 2D de
+    # 8 direções só é gerada sob demanda: python3 tools/gen_art.py --sprites
+    if "--sprites" in sys.argv:
+        sheet = gen_player_8dir(); sheet.save(os.path.join(ART, "player_8dir.png"))
+        write_sprite_frames(os.path.join(HERE, "..", "player", "player_frames.tres"))
+        # prévia 4x da folha 8 direções, com rótulos em fundo neutro
+        pv = Image.new("RGBA", (sheet.width + 8, sheet.height + 8), hx("5a5853"))
+        pv.alpha_composite(sheet, (4, 4))
+        pv.resize((pv.width * 4, pv.height * 4), Image.NEAREST).save("/workspace/player_8dir_preview.png")
+    print("ok:", tiles.size, player.size, solar.size, cone.size)
 
 if __name__ == "__main__":
     main()
