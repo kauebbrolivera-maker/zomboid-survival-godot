@@ -8,7 +8,12 @@ func _initialize() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color("5a5a58"); bg.size = Vector2(1152, 648)
 	root.add_child(bg)
+	# Uso: ... -s res://tools/model_grid.gd -- [caminho.glb] [saida.png]
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	var out_path: String = args[1] if args.size() > 1 else "/workspace/model3d_8dir.png"
 	var p := (load("res://player/player.tscn") as PackedScene).instantiate() as Player
+	if args.size() > 0 and args[0] != "":
+		(p.get_node("ModelView/SubViewport/World3D/Model") as CharacterModel).model_scene = load(args[0]) as PackedScene
 	p.position = Vector2(576, 400)
 	root.add_child(p)
 	(p.get_node("VisionCone") as Node2D).visible = false
@@ -25,5 +30,5 @@ func _initialize() -> void:
 		grid.blit_rect(img, Rect2i(Vector2i(476, 187), cell), Vector2i((i % 4) * cell.x, (i / 4) * cell.y))
 		print(NAMES[i])
 	grid.resize(grid.get_width() * 2, grid.get_height() * 2, Image.INTERPOLATE_NEAREST)
-	grid.save_png("/workspace/model3d_8dir.png")
+	grid.save_png(out_path)
 	quit()
