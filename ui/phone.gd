@@ -16,6 +16,10 @@ signal battery_changed(level: float)
 @export var extra_drain_when_open: float = 0.1
 
 const MINUTES_PER_DAY: float = 24.0 * 60.0
+## Abaixo deste nível (%) a barra fica vermelha.
+const LOW_BATTERY: float = 20.0
+const COLOR_OK: Color = Color("5f9e4a")    # verde (dessaturado)
+const COLOR_LOW: Color = Color("b8483a")   # vermelho
 
 @onready var phone_panel: Panel = $PhonePanel
 @onready var clock_label: Label = $PhonePanel/VBoxContainer/ClockLabel
@@ -28,11 +32,13 @@ var game_minutes: float = 0.0   # Minutos do dia no jogo (0..1439)
 var battery: float = 100.0      # Nível da bateria em %
 var is_dead: bool = false       # true quando a bateria acabou
 var _notice_tween: Tween = null # animação do aviso atual
+var _fill_style: StyleBoxFlat = StyleBoxFlat.new() # preenchimento da barra
 
 
 func _ready() -> void:
 	add_to_group("phone")   # permite que outros nós achem o celular
 	notice_label.visible = false
+	_setup_battery_bar()
 	game_minutes = fposmod(start_minutes, MINUTES_PER_DAY)
 	phone_panel.visible = false   # Começa guardado no bolso
 	screen_off.visible = false
@@ -130,6 +136,18 @@ func _update_clock() -> void:
 	clock_label.text = get_time_string()
 
 
+# Estilo da barra: fundo escuro + preenchimento colorido (verde/vermelho).
+func _setup_battery_bar() -> void:
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color("2a2a2b")
+	bg.set_corner_radius_all(6)
+	_fill_style.set_corner_radius_all(6)
+	_fill_style.bg_color = COLOR_OK
+	battery_bar.add_theme_stylebox_override("background", bg)
+	battery_bar.add_theme_stylebox_override("fill", _fill_style)
+
+
 func _update_battery_ui() -> void:
 	battery_bar.value = battery
+	_fill_style.bg_color = COLOR_LOW if battery < LOW_BATTERY else COLOR_OK
 	battery_label.text = "Bateria: %d%%" % ceili(battery)

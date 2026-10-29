@@ -23,10 +23,10 @@ func _initialize() -> void:
 		print("squash=%s reta(dir) v=%s |v|=%.1f  diagonal v=%s |v|=%.1f  cima v=%s |v|=%.1f" % [sq, r, r.length(), d, d.length(), u, u.length()])
 	Input.action_press("move_left")
 	for i: int in 30: await physics_frame
-	print("flip_h apos esquerda=", (p.get_node("Sprite2D") as Sprite2D).flip_h, " nome=", p.call("get_direction_name"))
+	print("anim apos esquerda=", (p.get_node("Body") as AnimatedSprite2D).animation, " nome=", p.call("get_direction_name"))
 	Input.action_release("move_left")
 	for i: int in 30: await physics_frame
-	print("flip_h parado=", (p.get_node("Sprite2D") as Sprite2D).flip_h)
+	print("anim parado=", (p.get_node("Body") as AnimatedSprite2D).animation)
 	Input.action_press("move_up"); Input.action_press("move_left")
 	for i: int in 20: await physics_frame
 	print("nome diagonal=", p.call("get_direction_name"))
