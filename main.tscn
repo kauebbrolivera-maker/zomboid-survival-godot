@@ -1,0 +1,61 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="PackedScene" path="res://ui/phone.tscn" id="1"]
+[ext_resource type="Texture2D" path="res://art/tiles.png" id="2"]
+[ext_resource type="Script" path="res://world/city_ground.gd" id="3"]
+[ext_resource type="Script" path="res://world/iso_camera.gd" id="4"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://world/painel_solar.tscn" id="6"]
+[ext_resource type="Script" path="res://world/day_night.gd" id="7"]
+
+[sub_resource type="TileSetAtlasSource" id="atlas"]
+texture = ExtResource("2")
+texture_region_size = Vector2i(128, 64)
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+3:0/0 = 0
+0:1/0 = 0
+1:1/0 = 0
+2:1/0 = 0
+3:1/0 = 0
+0:2/0 = 0
+1:2/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+
+[sub_resource type="TileSet" id="ts"]
+tile_shape = 1
+tile_layout = 5
+tile_size = Vector2i(128, 64)
+sources/0 = SubResource("atlas")
+
+[node name="Main" type="Node2D"]
+y_sort_enabled = true
+
+[node name="Darkness" type="CanvasModulate" parent="."]
+color = Color(0.102, 0.11, 0.133, 1)
+script = ExtResource("7")
+
+[node name="Ground" type="TileMapLayer" parent="."]
+z_index = -1
+tile_set = SubResource("ts")
+script = ExtResource("3")
+
+[node name="Player" parent="." instance=ExtResource("5")]
+position = Vector2(64, 4512)
+
+[node name="PainelSolar" parent="." instance=ExtResource("6")]
+position = Vector2(320, 4480)
+
+[node name="PainelSolar2" parent="." instance=ExtResource("6")]
+position = Vector2(-256, 4640)
+
+[node name="Camera" type="Camera2D" parent="."]
+script = ExtResource("4")
+target_path = NodePath("../Player")
+max_zoom = 0.35
+min_zoom = 0.15
+zoom_step = 0.05
+
+[node name="Phone" parent="." instance=ExtResource("1")]
