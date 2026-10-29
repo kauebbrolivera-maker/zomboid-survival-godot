@@ -2,6 +2,7 @@ class_name Player
 extends CharacterBody2D
 ## Jogador: física 2D (move_and_slide) + modelo 3D pixelizado num SubViewport,
 ## no estilo Project Zomboid. O corpo inteiro gira 360° suavemente no eixo Y.
+## O visual/animação do modelo fica no componente CharacterModel (nó "Model").
 
 ## MOVEMENT: olha para onde anda. MOUSE: olha para o cursor.
 enum AimMode { MOVEMENT, MOUSE }
@@ -27,28 +28,16 @@ const DIRECTION_NAMES: PackedStringArray = [
 @export var aim_mode: AimMode = AimMode.MOVEMENT
 ## Velocidade do giro do corpo (maior = mais rápido).
 @export var turn_speed: float = 12.0
-## Altura (unidades 3D) do balanço vertical ao andar.
-@export var bob_height: float = 0.05
-## Ângulo máximo (graus) do balanço das pernas/braços.
-@export var leg_swing_deg: float = 28.0
-## Passos por segundo na velocidade máxima.
-@export var step_rate: float = 2.2
 
 ## Última direção de movimento, no espaço "desachatado" do input
 ## (igual ao input_dir; x = direita na tela, y = baixo na tela).
 var last_direction: Vector2 = Vector2.DOWN
 
-var _walk_phase: float = 0.0
 var _ground_right: Vector3 = Vector3.RIGHT   # "direita da tela" no chão 3D
 var _ground_down: Vector3 = Vector3.BACK     # "baixo da tela" no chão 3D
 
-@onready var model: Node3D = $ModelView/SubViewport/World3D/Model
+@onready var model: CharacterModel = $ModelView/SubViewport/World3D/Model
 @onready var camera_3d: Camera3D = $ModelView/SubViewport/World3D/Camera3D
-@onready var _leg_l: Node3D = $ModelView/SubViewport/World3D/Model/LegL
-@onready var _leg_r: Node3D = $ModelView/SubViewport/World3D/Model/LegR
-@onready var _arm_l: Node3D = $ModelView/SubViewport/World3D/Model/ArmL
-@onready var _arm_r: Node3D = $ModelView/SubViewport/World3D/Model/ArmR
-@onready var _base_model_y: float = model.position.y
 
 
 func _ready() -> void:
@@ -75,7 +64,8 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_update_facing(delta)
-	_update_walk_anim(delta)
+	# idle/walk/run do GLB ou animação procedural do boneco provisório
+	model.set_motion(velocity.length() / speed)
 
 
 ## Direção do olhar no espaço "desachatado" (mesmo espaço do input_dir).
@@ -118,19 +108,3 @@ func _update_facing(delta: float) -> void:
 		return
 	var t: float = 1.0 - exp(-turn_speed * delta)
 	model.rotation.y = lerp_angle(model.rotation.y, _yaw_for(dir), t)
-
-
-## Animação procedural simples: balanço vertical + pernas/braços em pêndulo.
-func _update_walk_anim(delta: float) -> void:
-	var amount: float = clampf(velocity.length() / speed, 0.0, 1.0)
-	if amount > 0.05:
-		_walk_phase = wrapf(_walk_phase + delta * step_rate * TAU * amount, 0.0, TAU)
-	else:
-		# parado: volta a fase para 0 devagar, sem tranco
-		_walk_phase = lerp_angle(_walk_phase, 0.0, 1.0 - exp(-10.0 * delta))
-	var swing: float = sin(_walk_phase) * deg_to_rad(leg_swing_deg) * amount
-	_leg_l.rotation.x = swing
-	_leg_r.rotation.x = -swing
-	_arm_l.rotation.x = -swing * 0.8
-	_arm_r.rotation.x = swing * 0.8
-	model.position.y = _base_model_y + absf(sin(_walk_phase)) * bob_height * amount
